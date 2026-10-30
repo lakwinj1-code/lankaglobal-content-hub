@@ -1,0 +1,949 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Registered member account profile with isolated PII accessible only to the account owner and platform administrator.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Registered member display name.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified account email address (PII).",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "creatorType": {
+          "type": "string",
+          "description": "Community member persona selected at registration.",
+          "enum": ["Screenwriter", "Producer", "Reader"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of registration."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest profile update."
+        }
+      },
+      "required": ["uid", "displayName", "email", "creatorType", "createdAt", "updatedAt"]
+    },
+    "CreatorProfile": {
+      "title": "CreatorProfile",
+      "description": "Public filmmaker networking profile containing zero PII, displaying creative role, bio, follower counts, and collaboration availability.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Public creator name.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "creativeRole": {
+          "type": "string",
+          "description": "Primary filmmaking discipline.",
+          "enum": [
+            "Screenwriter",
+            "Director",
+            "Producer",
+            "Cinematographer",
+            "Actor",
+            "Editor",
+            "Composer",
+            "Reader"
+          ]
+        },
+        "headline": {
+          "type": "string",
+          "description": "Short professional headline displayed on profile cards.",
+          "minLength": 0,
+          "maxLength": 160
+        },
+        "bio": {
+          "type": "string",
+          "description": "Public biography, creative influences, and filmmaking focus.",
+          "minLength": 0,
+          "maxLength": 1000
+        },
+        "location": {
+          "type": "string",
+          "description": "City or region (non-PII).",
+          "minLength": 0,
+          "maxLength": 80
+        },
+        "openToCollab": {
+          "type": "boolean",
+          "description": "Whether the creator is open to co-production and filmmaking inquiries."
+        },
+        "followersCount": {
+          "type": "integer",
+          "description": "Total number of followers."
+        },
+        "followingCount": {
+          "type": "integer",
+          "description": "Total number of creators followed."
+        },
+        "isPublic": {
+          "type": "boolean",
+          "description": "Whether this profile is listed in the public filmmaker directory."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of profile creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest profile update."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "creativeRole",
+        "headline",
+        "bio",
+        "location",
+        "openToCollab",
+        "followersCount",
+        "followingCount",
+        "isPublic",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CreatorFollow": {
+      "title": "CreatorFollow",
+      "description": "Directional social follow edge between two registered creators.",
+      "type": "object",
+      "properties": {
+        "followId": {
+          "type": "string",
+          "description": "Deterministic ID formatted as followerUid_followingUid.",
+          "minLength": 3,
+          "maxLength": 260,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "followerUid": {
+          "type": "string",
+          "description": "UID of the follower.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "followingUid": {
+          "type": "string",
+          "description": "UID of the creator being followed.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "followerName": {
+          "type": "string",
+          "description": "Display name of the follower.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "followingName": {
+          "type": "string",
+          "description": "Display name of the followed creator.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when followed."
+        }
+      },
+      "required": [
+        "followId",
+        "followerUid",
+        "followingUid",
+        "followerName",
+        "followingName",
+        "createdAt"
+      ]
+    },
+    "CommunityPost": {
+      "title": "CommunityPost",
+      "description": "Public filmmaker community post for collaboration calls, script discussions, production updates, and industry insights.",
+      "type": "object",
+      "properties": {
+        "postId": {
+          "type": "string",
+          "description": "Unique post ID matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the post author.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Public display name of the author.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "authorRole": {
+          "type": "string",
+          "description": "Creative role of the author.",
+          "enum": [
+            "Screenwriter",
+            "Director",
+            "Producer",
+            "Cinematographer",
+            "Actor",
+            "Editor",
+            "Composer",
+            "Reader"
+          ]
+        },
+        "category": {
+          "type": "string",
+          "description": "Discussion category.",
+          "enum": [
+            "Collaboration Call",
+            "Script Discussion",
+            "Production Update",
+            "Industry Insight"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "description": "Headline of the community post.",
+          "minLength": 3,
+          "maxLength": 140
+        },
+        "body": {
+          "type": "string",
+          "description": "Main post content.",
+          "minLength": 10,
+          "maxLength": 2500
+        },
+        "linkedScriptId": {
+          "type": "string",
+          "description": "Optional publicScripts ID attached to the post.",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "linkedScriptTitle": {
+          "type": "string",
+          "description": "Optional title of the attached screenplay.",
+          "minLength": 0,
+          "maxLength": 140
+        },
+        "likesCount": {
+          "type": "integer",
+          "description": "Total applause/likes count."
+        },
+        "commentsCount": {
+          "type": "integer",
+          "description": "Total comments count."
+        },
+        "isPublished": {
+          "type": "boolean",
+          "description": "Whether the post is publicly visible."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of publication."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest update."
+        }
+      },
+      "required": [
+        "postId",
+        "authorUid",
+        "authorName",
+        "authorRole",
+        "category",
+        "title",
+        "body",
+        "linkedScriptId",
+        "linkedScriptTitle",
+        "likesCount",
+        "commentsCount",
+        "isPublished",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PostLike": {
+      "title": "PostLike",
+      "description": "Individual member like/applause record under a CommunityPost.",
+      "type": "object",
+      "properties": {
+        "postId": {
+          "type": "string",
+          "description": "Parent post ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "description": "Liking member UID matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when liked."
+        }
+      },
+      "required": ["postId", "uid", "createdAt"]
+    },
+    "PostComment": {
+      "title": "PostComment",
+      "description": "Member comment under a CommunityPost.",
+      "type": "object",
+      "properties": {
+        "commentId": {
+          "type": "string",
+          "description": "Unique comment ID matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "postId": {
+          "type": "string",
+          "description": "Parent post ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUid": {
+          "type": "string",
+          "description": "Commenting member UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Public display name of commenter.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "authorRole": {
+          "type": "string",
+          "description": "Creative role of commenter.",
+          "enum": [
+            "Screenwriter",
+            "Director",
+            "Producer",
+            "Cinematographer",
+            "Actor",
+            "Editor",
+            "Composer",
+            "Reader"
+          ]
+        },
+        "body": {
+          "type": "string",
+          "description": "Comment body text.",
+          "minLength": 1,
+          "maxLength": 800
+        },
+        "isPublished": {
+          "type": "boolean",
+          "description": "Whether the comment is visible."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when commented."
+        }
+      },
+      "required": [
+        "commentId",
+        "postId",
+        "authorUid",
+        "authorName",
+        "authorRole",
+        "body",
+        "isPublished",
+        "createdAt"
+      ]
+    },
+    "CollabRequest": {
+      "title": "CollabRequest",
+      "description": "Private collaboration or screenplay option inquiry sent directly from one verified member to another creator.",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "description": "Unique inquiry ID matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderUid": {
+          "type": "string",
+          "description": "UID of the member initiating contact.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Display name of the sender.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "senderRole": {
+          "type": "string",
+          "description": "Creative role of the sender.",
+          "enum": [
+            "Screenwriter",
+            "Director",
+            "Producer",
+            "Cinematographer",
+            "Actor",
+            "Editor",
+            "Composer",
+            "Reader"
+          ]
+        },
+        "recipientUid": {
+          "type": "string",
+          "description": "UID of the creator receiving the inquiry.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "recipientName": {
+          "type": "string",
+          "description": "Display name of the recipient.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "scriptId": {
+          "type": "string",
+          "description": "Optional screenplay ID that prompted the inquiry.",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "scriptTitle": {
+          "type": "string",
+          "description": "Optional screenplay title.",
+          "minLength": 0,
+          "maxLength": 140
+        },
+        "purpose": {
+          "type": "string",
+          "description": "Reason for reaching out.",
+          "enum": [
+            "Story Option / Co-Production",
+            "Directing / Production Team",
+            "Script Feedback",
+            "General Networking"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "Collaboration proposal or inquiry message.",
+          "minLength": 10,
+          "maxLength": 1200
+        },
+        "senderContact": {
+          "type": "string",
+          "description": "Optional email or WhatsApp contact shared privately with recipient (PII).",
+          "minLength": 0,
+          "maxLength": 160
+        },
+        "status": {
+          "type": "string",
+          "description": "Current response state.",
+          "enum": ["Pending", "Accepted", "Declined"]
+        },
+        "replyNote": {
+          "type": "string",
+          "description": "Recipient reply message and contact details.",
+          "minLength": 0,
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when sent."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest update."
+        }
+      },
+      "required": [
+        "requestId",
+        "senderUid",
+        "senderName",
+        "senderRole",
+        "recipientUid",
+        "recipientName",
+        "scriptId",
+        "scriptTitle",
+        "purpose",
+        "message",
+        "senderContact",
+        "status",
+        "replyNote",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PublicScript": {
+      "title": "PublicScript",
+      "description": "Publicly visible screenplay metadata displayed in the Hero Trending Showcase and Visitor Screenplay Gallery without any PII or private script files.",
+      "type": "object",
+      "properties": {
+        "scriptId": {
+          "type": "string",
+          "description": "Unique screenplay identifier matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the submitting creator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Working title of the screenplay.",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "status": {
+          "type": "string",
+          "description": "Editorial pipeline stage of the screenplay.",
+          "enum": ["Under Review", "Pitch Deck Ready", "Archived"]
+        },
+        "genre": {
+          "type": "string",
+          "description": "Primary genre classification.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "format": {
+          "type": "string",
+          "description": "Production format (Original Series, Feature Film, Limited Series).",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "writer": {
+          "type": "string",
+          "description": "Public display name of the screenwriter.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "episodesOrRuntime": {
+          "type": "string",
+          "description": "Episode structure or feature runtime label.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "year": {
+          "type": "string",
+          "description": "Slate label.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "keyArt": {
+          "type": "string",
+          "description": "Key art theme identifier.",
+          "enum": ["ravana", "sinharaja", "colombo", "yaksha", "custom"]
+        },
+        "loglineSi": {
+          "type": "string",
+          "description": "Sinhala logline summary.",
+          "minLength": 20,
+          "maxLength": 1000
+        },
+        "loglineEn": {
+          "type": "string",
+          "description": "English logline summary.",
+          "minLength": 20,
+          "maxLength": 1000
+        },
+        "synopsisSi": {
+          "type": "string",
+          "description": "Sinhala synopsis note.",
+          "minLength": 20,
+          "maxLength": 1500
+        },
+        "synopsisEn": {
+          "type": "string",
+          "description": "English synopsis note.",
+          "minLength": 20,
+          "maxLength": 1500
+        },
+        "visualTone": {
+          "type": "string",
+          "description": "Visual and tonal positioning.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "comparables": {
+          "type": "string",
+          "description": "International comparable titles.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "targetModel": {
+          "type": "string",
+          "description": "Target OTT financing or co-production model.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "views": {
+          "type": "integer",
+          "description": "Total gallery reader view count."
+        },
+        "isPublished": {
+          "type": "boolean",
+          "description": "Whether the screenplay is visible in the public gallery."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of initial submission."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest update."
+        }
+      },
+      "required": [
+        "scriptId",
+        "authorUid",
+        "title",
+        "status",
+        "genre",
+        "format",
+        "writer",
+        "episodesOrRuntime",
+        "year",
+        "keyArt",
+        "loglineSi",
+        "loglineEn",
+        "synopsisSi",
+        "synopsisEn",
+        "visualTone",
+        "comparables",
+        "targetModel",
+        "views",
+        "isPublished",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PrivateSubmission": {
+      "title": "PrivateSubmission",
+      "description": "Confidential NDA submission record containing writer PII, external cloud URL, and uploaded screenplay file metadata, accessible only to the submitting author and administrator.",
+      "type": "object",
+      "properties": {
+        "scriptId": {
+          "type": "string",
+          "description": "Matching screenplay ID in publicScripts.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the creator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referenceId": {
+          "type": "string",
+          "description": "Mutual NDA reference code (e.g. LG-123456).",
+          "minLength": 3,
+          "maxLength": 40,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Working title of the screenplay.",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "writerName": {
+          "type": "string",
+          "description": "Full legal or creator name.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Writer contact email address (PII).",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "phone": {
+          "type": "string",
+          "description": "Writer phone or WhatsApp number (PII).",
+          "minLength": 7,
+          "maxLength": 40
+        },
+        "genre": {
+          "type": "string",
+          "description": "Primary genre.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "format": {
+          "type": "string",
+          "description": "Production format.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "logline": {
+          "type": "string",
+          "description": "Submitted logline.",
+          "minLength": 20,
+          "maxLength": 1000
+        },
+        "scriptUrl": {
+          "type": "string",
+          "description": "Optional Google Drive or Dropbox screenplay link.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "fileName": {
+          "type": "string",
+          "description": "Original filename of the uploaded screenplay document.",
+          "minLength": 0,
+          "maxLength": 200
+        },
+        "fileMimeType": {
+          "type": "string",
+          "description": "MIME type of the uploaded screenplay document.",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "fileSizeBytes": {
+          "type": "integer",
+          "description": "Byte size of the uploaded screenplay file."
+        },
+        "chunkCount": {
+          "type": "integer",
+          "description": "Total number of Base64 chunks stored in the fileChunks subcollection."
+        },
+        "ipConfirmed": {
+          "type": "boolean",
+          "description": "Creator confirmation of 100% IP ownership and NDA acceptance."
+        },
+        "reviewStatus": {
+          "type": "string",
+          "description": "Editorial review status managed by the administrator.",
+          "enum": ["Pending Review", "Shortlisted", "Pitch Deck Ready", "Archived"]
+        },
+        "adminNotes": {
+          "type": "string",
+          "description": "Internal editorial coverage notes written by the administrator.",
+          "minLength": 0,
+          "maxLength": 2000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of submission."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest review update."
+        }
+      },
+      "required": [
+        "scriptId",
+        "authorUid",
+        "referenceId",
+        "title",
+        "writerName",
+        "email",
+        "phone",
+        "genre",
+        "format",
+        "logline",
+        "scriptUrl",
+        "fileName",
+        "fileMimeType",
+        "fileSizeBytes",
+        "chunkCount",
+        "ipConfirmed",
+        "reviewStatus",
+        "adminNotes",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FileChunk": {
+      "title": "FileChunk",
+      "description": "Chunked Base64 binary segment of an uploaded screenplay file stored under a PrivateSubmission.",
+      "type": "object",
+      "properties": {
+        "scriptId": {
+          "type": "string",
+          "description": "Parent submission ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "chunkId": {
+          "type": "string",
+          "description": "Chunk document ID (e.g. chunk_0).",
+          "minLength": 7,
+          "maxLength": 12,
+          "pattern": "^chunk_[0-9]{1,2}$"
+        },
+        "authorUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the uploading creator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "chunkIndex": {
+          "type": "integer",
+          "description": "Zero-based sequential chunk index."
+        },
+        "dataBase64": {
+          "type": "string",
+          "description": "Base64-encoded file segment (up to 650,000 characters).",
+          "minLength": 1,
+          "maxLength": 650000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when chunk was uploaded."
+        }
+      },
+      "required": [
+        "scriptId",
+        "chunkId",
+        "authorUid",
+        "chunkIndex",
+        "dataBase64",
+        "createdAt"
+      ]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Trusted administrator registry entry.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the administrator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified administrator email.",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when admin entry was created."
+        }
+      },
+      "required": ["uid", "email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Registered member account profiles isolated per user UID."
+    },
+    "/creatorProfiles/{userId}": {
+      "schema": { "$ref": "#/entities/CreatorProfile" },
+      "description": "Public filmmaker networking profiles containing zero PII."
+    },
+    "/follows/{followId}": {
+      "schema": { "$ref": "#/entities/CreatorFollow" },
+      "description": "Social follow connections between registered creators."
+    },
+    "/communityPosts/{postId}": {
+      "schema": { "$ref": "#/entities/CommunityPost" },
+      "description": "Open filmmaker community posts, collaboration calls, and discussions."
+    },
+    "/communityPosts/{postId}/likes/{likeUid}": {
+      "schema": { "$ref": "#/entities/PostLike" },
+      "description": "Member likes/applause on community posts."
+    },
+    "/communityPosts/{postId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/PostComment" },
+      "description": "Member discussion comments under community posts."
+    },
+    "/collabRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/CollabRequest" },
+      "description": "Private creator-to-creator collaboration and story option inquiries."
+    },
+    "/publicScripts/{scriptId}": {
+      "schema": { "$ref": "#/entities/PublicScript" },
+      "description": "Public showcase metadata for Hero Trending Carousel and Visitor Screenplay Gallery."
+    },
+    "/privateSubmissions/{scriptId}": {
+      "schema": { "$ref": "#/entities/PrivateSubmission" },
+      "description": "Confidential NDA intake vault containing writer contact PII and screenplay file metadata."
+    },
+    "/privateSubmissions/{scriptId}/fileChunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/FileChunk" },
+      "description": "Confidential Base64 screenplay file segments downloadable by the administrator."
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Trusted administrator UIDs."
+    }
+  }
+}

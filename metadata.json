@@ -1,0 +1,8 @@
+{
+  "name": "LankaGlobal Content Hub",
+  "description": "Bilingual Sri Lankan screenplay development, interactive pitch bible studio, and global OTT co-production pipeline platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

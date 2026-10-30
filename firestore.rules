@@ -1,0 +1,1006 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 4.1: Global Safety Net (Default Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidCompositeId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 260 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidChunkId(id) {
+      return id is string && id.size() >= 7 && id.size() <= 12 && id.matches('^chunk_[0-9]{1,2}$');
+    }
+
+    function isValidCreativeRole(role) {
+      return role is string &&
+        role.size() <= 30 &&
+        role in [
+          'Screenwriter',
+          'Director',
+          'Producer',
+          'Cinematographer',
+          'Actor',
+          'Editor',
+          'Composer',
+          'Reader'
+        ];
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Pure token check with zero DB reads (safe for list queries per Pillar 8)
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() &&
+        request.auth.token.email is string &&
+        request.auth.token.email.lower() == 'lakwinj1@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprint 0: UserProfile (Registered Member Account — Zero Self-Assigned Admin Roles)
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+        'uid',
+        'displayName',
+        'email',
+        'creatorType',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid',
+        'displayName',
+        'email',
+        'creatorType',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      isValidId(data.uid) &&
+      data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100 &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.creatorType is string && data.creatorType.size() <= 30 && data.creatorType in ['Screenwriter', 'Producer', 'Reader'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint 0B: CreatorProfile (Public Filmmaker Profile — Zero PII)
+    function isValidCreatorProfile(data) {
+      return data.keys().hasAll([
+        'uid',
+        'displayName',
+        'creativeRole',
+        'headline',
+        'bio',
+        'location',
+        'openToCollab',
+        'followersCount',
+        'followingCount',
+        'isPublic',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid',
+        'displayName',
+        'creativeRole',
+        'headline',
+        'bio',
+        'location',
+        'openToCollab',
+        'followersCount',
+        'followingCount',
+        'isPublic',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      isValidId(data.uid) &&
+      data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100 &&
+      isValidCreativeRole(data.creativeRole) &&
+      data.headline is string && data.headline.size() <= 160 &&
+      data.bio is string && data.bio.size() <= 1000 &&
+      data.location is string && data.location.size() <= 80 &&
+      data.openToCollab is bool &&
+      data.followersCount is int && data.followersCount >= 0 && data.followersCount <= 100000000 &&
+      data.followingCount is int && data.followingCount >= 0 && data.followingCount <= 100000000 &&
+      data.isPublic is bool &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint 0C: CreatorFollow
+    function isValidCreatorFollow(data) {
+      return data.keys().hasAll([
+        'followId',
+        'followerUid',
+        'followingUid',
+        'followerName',
+        'followingName',
+        'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'followId',
+        'followerUid',
+        'followingUid',
+        'followerName',
+        'followingName',
+        'createdAt'
+      ]) &&
+      isValidCompositeId(data.followId) &&
+      isValidId(data.followerUid) &&
+      isValidId(data.followingUid) &&
+      data.followerName is string && data.followerName.size() >= 2 && data.followerName.size() <= 100 &&
+      data.followingName is string && data.followingName.size() >= 2 && data.followingName.size() <= 100 &&
+      data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint 0D: CommunityPost
+    function isValidCommunityPost(data) {
+      return data.keys().hasAll([
+        'postId',
+        'authorUid',
+        'authorName',
+        'authorRole',
+        'category',
+        'title',
+        'body',
+        'linkedScriptId',
+        'linkedScriptTitle',
+        'likesCount',
+        'commentsCount',
+        'isPublished',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'postId',
+        'authorUid',
+        'authorName',
+        'authorRole',
+        'category',
+        'title',
+        'body',
+        'linkedScriptId',
+        'linkedScriptTitle',
+        'likesCount',
+        'commentsCount',
+        'isPublished',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      isValidId(data.postId) &&
+      isValidId(data.authorUid) &&
+      data.authorName is string && data.authorName.size() >= 2 && data.authorName.size() <= 100 &&
+      isValidCreativeRole(data.authorRole) &&
+      data.category is string && data.category.size() <= 40 && data.category in ['Collaboration Call', 'Script Discussion', 'Production Update', 'Industry Insight'] &&
+      data.title is string && data.title.size() >= 3 && data.title.size() <= 140 &&
+      data.body is string && data.body.size() >= 10 && data.body.size() <= 2500 &&
+      data.linkedScriptId is string && data.linkedScriptId.size() <= 128 && (data.linkedScriptId == '' || isValidId(data.linkedScriptId)) &&
+      data.linkedScriptTitle is string && data.linkedScriptTitle.size() <= 140 &&
+      data.likesCount is int && data.likesCount >= 0 && data.likesCount <= 100000000 &&
+      data.commentsCount is int && data.commentsCount >= 0 && data.commentsCount <= 100000000 &&
+      data.isPublished is bool &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint 0E: PostLike
+    function isValidPostLike(data) {
+      return data.keys().hasAll(['postId', 'uid', 'createdAt']) &&
+      data.keys().hasOnly(['postId', 'uid', 'createdAt']) &&
+      isValidId(data.postId) &&
+      isValidId(data.uid) &&
+      data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint 0F: PostComment
+    function isValidPostComment(data) {
+      return data.keys().hasAll([
+        'commentId',
+        'postId',
+        'authorUid',
+        'authorName',
+        'authorRole',
+        'body',
+        'isPublished',
+        'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'commentId',
+        'postId',
+        'authorUid',
+        'authorName',
+        'authorRole',
+        'body',
+        'isPublished',
+        'createdAt'
+      ]) &&
+      isValidId(data.commentId) &&
+      isValidId(data.postId) &&
+      isValidId(data.authorUid) &&
+      data.authorName is string && data.authorName.size() >= 2 && data.authorName.size() <= 100 &&
+      isValidCreativeRole(data.authorRole) &&
+      data.body is string && data.body.size() >= 1 && data.body.size() <= 800 &&
+      data.isPublished is bool &&
+      data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint 0G: CollabRequest (Private Collaboration & Story Inquiry)
+    function isValidCollabRequest(data) {
+      return data.keys().hasAll([
+        'requestId',
+        'senderUid',
+        'senderName',
+        'senderRole',
+        'recipientUid',
+        'recipientName',
+        'scriptId',
+        'scriptTitle',
+        'purpose',
+        'message',
+        'senderContact',
+        'status',
+        'replyNote',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'requestId',
+        'senderUid',
+        'senderName',
+        'senderRole',
+        'recipientUid',
+        'recipientName',
+        'scriptId',
+        'scriptTitle',
+        'purpose',
+        'message',
+        'senderContact',
+        'status',
+        'replyNote',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      isValidId(data.requestId) &&
+      isValidId(data.senderUid) &&
+      data.senderName is string && data.senderName.size() >= 2 && data.senderName.size() <= 100 &&
+      isValidCreativeRole(data.senderRole) &&
+      isValidId(data.recipientUid) &&
+      data.recipientName is string && data.recipientName.size() >= 2 && data.recipientName.size() <= 100 &&
+      data.scriptId is string && data.scriptId.size() <= 128 && (data.scriptId == '' || isValidId(data.scriptId)) &&
+      data.scriptTitle is string && data.scriptTitle.size() <= 140 &&
+      data.purpose is string && data.purpose.size() <= 40 && data.purpose in ['Story Option / Co-Production', 'Directing / Production Team', 'Script Feedback', 'General Networking'] &&
+      data.message is string && data.message.size() >= 10 && data.message.size() <= 1200 &&
+      data.senderContact is string && data.senderContact.size() <= 160 &&
+      data.status is string && data.status.size() <= 20 && data.status in ['Pending', 'Accepted', 'Declined'] &&
+      data.replyNote is string && data.replyNote.size() <= 1000 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint 1: PublicScript (Zero PII, Zero Private Files)
+    function isValidPublicScript(data) {
+      return data.keys().hasAll([
+        'scriptId',
+        'authorUid',
+        'title',
+        'status',
+        'genre',
+        'format',
+        'writer',
+        'episodesOrRuntime',
+        'year',
+        'keyArt',
+        'loglineSi',
+        'loglineEn',
+        'synopsisSi',
+        'synopsisEn',
+        'visualTone',
+        'comparables',
+        'targetModel',
+        'views',
+        'isPublished',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'scriptId',
+        'authorUid',
+        'title',
+        'status',
+        'genre',
+        'format',
+        'writer',
+        'episodesOrRuntime',
+        'year',
+        'keyArt',
+        'loglineSi',
+        'loglineEn',
+        'synopsisSi',
+        'synopsisEn',
+        'visualTone',
+        'comparables',
+        'targetModel',
+        'views',
+        'isPublished',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      isValidId(data.scriptId) &&
+      isValidId(data.authorUid) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+      data.status is string && data.status.size() <= 30 && data.status in ['Under Review', 'Pitch Deck Ready', 'Archived'] &&
+      data.genre is string && data.genre.size() >= 1 && data.genre.size() <= 80 &&
+      data.format is string && data.format.size() >= 1 && data.format.size() <= 80 &&
+      data.writer is string && data.writer.size() >= 2 && data.writer.size() <= 100 &&
+      data.episodesOrRuntime is string && data.episodesOrRuntime.size() >= 1 && data.episodesOrRuntime.size() <= 60 &&
+      data.year is string && data.year.size() >= 1 && data.year.size() <= 60 &&
+      data.keyArt is string && data.keyArt.size() <= 20 && data.keyArt in ['ravana', 'sinharaja', 'colombo', 'yaksha', 'custom'] &&
+      data.loglineSi is string && data.loglineSi.size() >= 20 && data.loglineSi.size() <= 1000 &&
+      data.loglineEn is string && data.loglineEn.size() >= 20 && data.loglineEn.size() <= 1000 &&
+      data.synopsisSi is string && data.synopsisSi.size() >= 20 && data.synopsisSi.size() <= 1500 &&
+      data.synopsisEn is string && data.synopsisEn.size() >= 20 && data.synopsisEn.size() <= 1500 &&
+      data.visualTone is string && data.visualTone.size() >= 1 && data.visualTone.size() <= 200 &&
+      data.comparables is string && data.comparables.size() >= 1 && data.comparables.size() <= 200 &&
+      data.targetModel is string && data.targetModel.size() >= 1 && data.targetModel.size() <= 200 &&
+      data.views is int && data.views >= 0 && data.views <= 1000000000 &&
+      data.isPublished is bool &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint 2: PrivateSubmission (Confidential PII & File Metadata Vault)
+    function isValidPrivateSubmission(data) {
+      return data.keys().hasAll([
+        'scriptId',
+        'authorUid',
+        'referenceId',
+        'title',
+        'writerName',
+        'email',
+        'phone',
+        'genre',
+        'format',
+        'logline',
+        'scriptUrl',
+        'fileName',
+        'fileMimeType',
+        'fileSizeBytes',
+        'chunkCount',
+        'ipConfirmed',
+        'reviewStatus',
+        'adminNotes',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'scriptId',
+        'authorUid',
+        'referenceId',
+        'title',
+        'writerName',
+        'email',
+        'phone',
+        'genre',
+        'format',
+        'logline',
+        'scriptUrl',
+        'fileName',
+        'fileMimeType',
+        'fileSizeBytes',
+        'chunkCount',
+        'ipConfirmed',
+        'reviewStatus',
+        'adminNotes',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      isValidId(data.scriptId) &&
+      isValidId(data.authorUid) &&
+      data.referenceId is string && data.referenceId.size() >= 3 && data.referenceId.size() <= 40 && data.referenceId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+      data.writerName is string && data.writerName.size() >= 2 && data.writerName.size() <= 100 &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.phone is string && data.phone.size() >= 7 && data.phone.size() <= 40 &&
+      data.genre is string && data.genre.size() >= 1 && data.genre.size() <= 80 &&
+      data.format is string && data.format.size() >= 1 && data.format.size() <= 80 &&
+      data.logline is string && data.logline.size() >= 20 && data.logline.size() <= 1000 &&
+      data.scriptUrl is string && data.scriptUrl.size() <= 500 &&
+      data.fileName is string && data.fileName.size() <= 200 &&
+      data.fileMimeType is string && data.fileMimeType.size() <= 120 &&
+      data.fileSizeBytes is int && data.fileSizeBytes >= 0 && data.fileSizeBytes <= 10485760 &&
+      data.chunkCount is int && data.chunkCount >= 0 && data.chunkCount <= 25 &&
+      data.ipConfirmed is bool && data.ipConfirmed == true &&
+      data.reviewStatus is string && data.reviewStatus.size() <= 30 && data.reviewStatus in ['Pending Review', 'Shortlisted', 'Pitch Deck Ready', 'Archived'] &&
+      data.adminNotes is string && data.adminNotes.size() <= 2000 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint 3: FileChunk (Confidential Base64 Screenplay File Segment)
+    function isValidFileChunk(data) {
+      return data.keys().hasAll([
+        'scriptId',
+        'chunkId',
+        'authorUid',
+        'chunkIndex',
+        'dataBase64',
+        'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'scriptId',
+        'chunkId',
+        'authorUid',
+        'chunkIndex',
+        'dataBase64',
+        'createdAt'
+      ]) &&
+      isValidId(data.scriptId) &&
+      isValidChunkId(data.chunkId) &&
+      isValidId(data.authorUid) &&
+      data.chunkIndex is int && data.chunkIndex >= 0 && data.chunkIndex <= 24 &&
+      data.dataBase64 is string && data.dataBase64.size() >= 1 && data.dataBase64.size() <= 650000 &&
+      data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint 4: AdminUser
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+      data.keys().hasOnly(['uid', 'email', 'createdAt']) &&
+      isValidId(data.uid) &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.createdAt is timestamp;
+    }
+
+    // Collection 0: Registered Member Accounts (Strict PII Isolation — Owner or Admin Only)
+    match /users/{userId} {
+      allow get: if isVerifiedUser() &&
+        isValidId(userId) &&
+        (request.auth.uid == userId || isAdmin());
+
+      allow list: if false;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().email.lower() == request.auth.token.email.lower() &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if (
+        isVerifiedUser() && isValidId(userId) && isValidUserProfile(incoming()) && (
+          // Action 1: Owner Profile Edit (Immutable uid, email, createdAt)
+          (
+            request.auth.uid == userId &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'creatorType', 'updatedAt']) &&
+            incoming().uid == existing().uid &&
+            incoming().email == existing().email &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          ) ||
+          // Action 2: Admin Escape Hatch
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'creatorType', 'updatedAt']) &&
+            incoming().uid == existing().uid &&
+            incoming().email == existing().email &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          )
+        )
+      );
+
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Collection 0B: Public Filmmaker Networking Profiles (Zero PII)
+    match /creatorProfiles/{userId} {
+      allow get: if isValidId(userId) && (
+        existing().isPublic == true ||
+        (isVerifiedUser() && request.auth.uid == userId) ||
+        isAdmin()
+      );
+
+      allow list: if existing().isPublic == true || isBootstrappedAdmin();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidCreatorProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().followersCount == 0 &&
+        incoming().followingCount == 0 &&
+        incoming().isPublic == true &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/users/$(userId));
+
+      allow update: if (
+        isVerifiedUser() && isValidId(userId) && isValidCreatorProfile(incoming()) && (
+          // Action 1: Owner Edits Public Profile Fields
+          (
+            request.auth.uid == userId &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName',
+              'creativeRole',
+              'headline',
+              'bio',
+              'location',
+              'openToCollab',
+              'isPublic',
+              'updatedAt'
+            ]) &&
+            incoming().uid == existing().uid &&
+            incoming().followersCount == existing().followersCount &&
+            incoming().followingCount == existing().followingCount &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          ) ||
+          // Action 2: Atomic Follower Count +1 Paired With Follow Creation
+          (
+            request.auth.uid != userId &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']) &&
+            incoming().followersCount == existing().followersCount + 1 &&
+            incoming().uid == existing().uid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            !exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) &&
+            existsAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId))
+          ) ||
+          // Action 3: Atomic Follower Count -1 Paired With Follow Deletion
+          (
+            request.auth.uid != userId &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']) &&
+            existing().followersCount > 0 &&
+            incoming().followersCount == existing().followersCount - 1 &&
+            incoming().uid == existing().uid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) &&
+            !existsAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId))
+          ) ||
+          // Action 4: Owner Atomic Following Count +/-1
+          (
+            request.auth.uid == userId &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']) &&
+            (
+              incoming().followingCount == existing().followingCount + 1 ||
+              (existing().followingCount > 0 && incoming().followingCount == existing().followingCount - 1)
+            ) &&
+            incoming().uid == existing().uid &&
+            incoming().followersCount == existing().followersCount &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          ) ||
+          // Action 5: Admin Moderation Escape Hatch
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName',
+              'creativeRole',
+              'headline',
+              'bio',
+              'location',
+              'openToCollab',
+              'isPublic',
+              'updatedAt'
+            ]) &&
+            incoming().uid == existing().uid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          )
+        )
+      );
+
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Collection 0C: Social Follow Connections
+    match /follows/{followId} {
+      allow get: if isVerifiedUser() &&
+        isValidCompositeId(followId) &&
+        (existing().followerUid == request.auth.uid || existing().followingUid == request.auth.uid || isAdmin());
+
+      allow list: if isVerifiedUser() &&
+        (existing().followerUid == request.auth.uid || existing().followingUid == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidCompositeId(followId) &&
+        isValidCreatorFollow(incoming()) &&
+        incoming().followerUid == request.auth.uid &&
+        incoming().followerUid != incoming().followingUid &&
+        followId == (incoming().followerUid + '_' + incoming().followingUid) &&
+        incoming().createdAt == request.time &&
+        existsAfter(/databases/$(database)/documents/creatorProfiles/$(incoming().followerUid)) &&
+        existsAfter(/databases/$(database)/documents/creatorProfiles/$(incoming().followingUid));
+
+      allow update: if false;
+
+      allow delete: if isVerifiedUser() &&
+        isValidCompositeId(followId) &&
+        (existing().followerUid == request.auth.uid || isAdmin());
+    }
+
+    // Collection 0D: Filmmaker Community Posts & Subcollections
+    match /communityPosts/{postId} {
+      allow get: if isValidId(postId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isBootstrappedAdmin();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(postId) &&
+        isValidCommunityPost(incoming()) &&
+        incoming().postId == postId &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().likesCount == 0 &&
+        incoming().commentsCount == 0 &&
+        incoming().isPublished == true &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/creatorProfiles/$(request.auth.uid));
+
+      allow update: if (
+        isVerifiedUser() && isValidId(postId) && isValidCommunityPost(incoming()) && (
+          // Action 1: Author Content Edit
+          (
+            existing().authorUid == request.auth.uid &&
+            existing().isPublished == true &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title',
+              'body',
+              'category',
+              'linkedScriptId',
+              'linkedScriptTitle',
+              'updatedAt'
+            ]) &&
+            incoming().postId == existing().postId &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().likesCount == existing().likesCount &&
+            incoming().commentsCount == existing().commentsCount &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          ) ||
+          // Action 2: Atomic Like +1 Paired With Like Subdocument Creation
+          (
+            existing().isPublished == true &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'updatedAt']) &&
+            incoming().likesCount == existing().likesCount + 1 &&
+            incoming().postId == existing().postId &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            !exists(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid)) &&
+            existsAfter(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid))
+          ) ||
+          // Action 3: Atomic Unlike -1 Paired With Like Subdocument Deletion
+          (
+            existing().isPublished == true &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'updatedAt']) &&
+            existing().likesCount > 0 &&
+            incoming().likesCount == existing().likesCount - 1 &&
+            incoming().postId == existing().postId &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            exists(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid)) &&
+            !existsAfter(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid))
+          ) ||
+          // Action 4: Atomic Comment Counter +1
+          (
+            existing().isPublished == true &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) &&
+            incoming().commentsCount == existing().commentsCount + 1 &&
+            incoming().postId == existing().postId &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          ) ||
+          // Action 5: Admin Moderation Escape Hatch
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['isPublished', 'title', 'body', 'category', 'updatedAt']) &&
+            incoming().postId == existing().postId &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          )
+        )
+      );
+
+      allow delete: if isVerifiedUser() &&
+        isValidId(postId) &&
+        (existing().authorUid == request.auth.uid || isAdmin());
+
+      // Subcollection: Post Likes (Master Gate Verified)
+      match /likes/{likeUid} {
+        allow get: if isVerifiedUser() &&
+          isValidId(postId) &&
+          isValidId(likeUid) &&
+          (request.auth.uid == likeUid || isAdmin());
+
+        allow list: if isVerifiedUser() &&
+          (existing().uid == request.auth.uid || isBootstrappedAdmin());
+
+        allow create: if isVerifiedUser() &&
+          isValidId(postId) &&
+          isValidId(likeUid) &&
+          request.auth.uid == likeUid &&
+          isValidPostLike(incoming()) &&
+          incoming().postId == postId &&
+          incoming().uid == likeUid &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/communityPosts/$(postId)) &&
+          get(/databases/$(database)/documents/communityPosts/$(postId)).data.isPublished == true;
+
+        allow update: if false;
+
+        allow delete: if isVerifiedUser() &&
+          isValidId(postId) &&
+          isValidId(likeUid) &&
+          (request.auth.uid == likeUid || isAdmin());
+      }
+
+      // Subcollection: Post Comments (Master Gate Verified)
+      match /comments/{commentId} {
+        allow get: if isValidId(postId) &&
+          isValidId(commentId) &&
+          (existing().isPublished == true || isAdmin());
+
+        allow list: if existing().isPublished == true || isBootstrappedAdmin();
+
+        allow create: if isVerifiedUser() &&
+          isValidId(postId) &&
+          isValidId(commentId) &&
+          isValidPostComment(incoming()) &&
+          incoming().commentId == commentId &&
+          incoming().postId == postId &&
+          incoming().authorUid == request.auth.uid &&
+          incoming().isPublished == true &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/communityPosts/$(postId)) &&
+          get(/databases/$(database)/documents/communityPosts/$(postId)).data.isPublished == true;
+
+        allow update: if false;
+
+        allow delete: if isVerifiedUser() &&
+          isValidId(postId) &&
+          isValidId(commentId) &&
+          (existing().authorUid == request.auth.uid || isAdmin());
+      }
+    }
+
+    // Collection 0E: Private Creator Collaboration & Story Inquiries (Strict Sender/Recipient Isolation)
+    match /collabRequests/{requestId} {
+      allow get: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        (existing().senderUid == request.auth.uid || existing().recipientUid == request.auth.uid || isAdmin());
+
+      allow list: if isVerifiedUser() &&
+        (existing().senderUid == request.auth.uid || existing().recipientUid == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        isValidCollabRequest(incoming()) &&
+        incoming().requestId == requestId &&
+        incoming().senderUid == request.auth.uid &&
+        incoming().senderUid != incoming().recipientUid &&
+        incoming().status == 'Pending' &&
+        incoming().replyNote == '' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/users/$(incoming().recipientUid));
+
+      allow update: if (
+        isVerifiedUser() && isValidId(requestId) && isValidCollabRequest(incoming()) && (
+          // Action 1: Recipient Responds (Terminal State Locked Once Accepted or Declined)
+          (
+            existing().recipientUid == request.auth.uid &&
+            existing().status == 'Pending' &&
+            incoming().status in ['Accepted', 'Declined'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'replyNote', 'updatedAt']) &&
+            incoming().requestId == existing().requestId &&
+            incoming().senderUid == existing().senderUid &&
+            incoming().recipientUid == existing().recipientUid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          ) ||
+          // Action 2: Admin Override Escape Hatch
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'replyNote', 'updatedAt']) &&
+            incoming().requestId == existing().requestId &&
+            incoming().senderUid == existing().senderUid &&
+            incoming().recipientUid == existing().recipientUid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          )
+        )
+      );
+
+      allow delete: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        (existing().senderUid == request.auth.uid || isAdmin());
+    }
+
+    // Collection 1: Public Screenplay Gallery Metadata (Zero PII)
+    match /publicScripts/{scriptId} {
+      allow get: if isValidId(scriptId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isBootstrappedAdmin();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(scriptId) &&
+        isValidPublicScript(incoming()) &&
+        incoming().scriptId == scriptId &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().status == 'Under Review' &&
+        incoming().views == 0 &&
+        incoming().isPublished == true &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/privateSubmissions/$(scriptId));
+
+      allow update: if (
+        isVerifiedUser() && isValidId(scriptId) && isValidPublicScript(incoming()) && (
+          // Action 1: Admin Moderation & Editorial Packaging Update
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'isPublished', 'comparables', 'visualTone', 'targetModel', 'updatedAt']) &&
+            incoming().scriptId == existing().scriptId &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          ) ||
+          // Action 2: Atomic +1 Reader View Count Increment (Blocked if Archived)
+          (
+            existing().status != 'Archived' &&
+            existing().isPublished == true &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['views', 'updatedAt']) &&
+            incoming().views == existing().views + 1 &&
+            incoming().scriptId == existing().scriptId &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          ) ||
+          // Action 3: Creator Synopsis/Title Revision While Under Review (Blocked if Archived)
+          (
+            existing().authorUid == request.auth.uid &&
+            existing().status == 'Under Review' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'loglineSi', 'loglineEn', 'synopsisSi', 'synopsisEn', 'updatedAt']) &&
+            incoming().status == existing().status &&
+            incoming().views == existing().views &&
+            incoming().scriptId == existing().scriptId &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          )
+        )
+      );
+
+      allow delete: if isAdmin() && isValidId(scriptId);
+    }
+
+    // Collection 2: Private NDA Submission Vault (Strict PII & File Metadata Isolation)
+    match /privateSubmissions/{scriptId} {
+      allow get: if isVerifiedUser() &&
+        isValidId(scriptId) &&
+        (existing().authorUid == request.auth.uid || isAdmin());
+
+      allow list: if isVerifiedUser() &&
+        (existing().authorUid == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(scriptId) &&
+        isValidPrivateSubmission(incoming()) &&
+        incoming().scriptId == scriptId &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().reviewStatus == 'Pending Review' &&
+        incoming().adminNotes == '' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/publicScripts/$(scriptId));
+
+      allow update: if (
+        isVerifiedUser() && isValidId(scriptId) && isValidPrivateSubmission(incoming()) && (
+          // Action 1: Admin Review Status & Editorial Notes Update
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['reviewStatus', 'adminNotes', 'updatedAt']) &&
+            incoming().scriptId == existing().scriptId &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().referenceId == existing().referenceId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          ) ||
+          // Action 2: Creator Cloud Link Update While Pending Review (Blocked if Archived)
+          (
+            existing().authorUid == request.auth.uid &&
+            existing().reviewStatus == 'Pending Review' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['scriptUrl', 'updatedAt']) &&
+            incoming().scriptId == existing().scriptId &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().referenceId == existing().referenceId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time
+          )
+        )
+      );
+
+      allow delete: if isAdmin() && isValidId(scriptId);
+
+      // Subcollection 3: Confidential Uploaded Screenplay Binary Chunks
+      match /fileChunks/{chunkId} {
+        allow get: if isVerifiedUser() &&
+          isValidId(scriptId) &&
+          isValidChunkId(chunkId) &&
+          (
+            isAdmin() ||
+            get(/databases/$(database)/documents/privateSubmissions/$(scriptId)).data.authorUid == request.auth.uid
+          );
+
+        allow list: if false;
+
+        allow create: if isVerifiedUser() &&
+          isValidId(scriptId) &&
+          isValidChunkId(chunkId) &&
+          isValidFileChunk(incoming()) &&
+          incoming().scriptId == scriptId &&
+          incoming().chunkId == chunkId &&
+          incoming().authorUid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/privateSubmissions/$(scriptId)) &&
+          get(/databases/$(database)/documents/privateSubmissions/$(scriptId)).data.authorUid == request.auth.uid;
+
+        allow update: if false;
+
+        allow delete: if isAdmin() && isValidId(scriptId) && isValidChunkId(chunkId);
+      }
+    }
+
+    // Collection 4: Trusted Administrator Registry
+    match /admins/{adminUid} {
+      allow get: if isVerifiedUser() &&
+        isValidId(adminUid) &&
+        (request.auth.uid == adminUid || isAdmin());
+
+      allow list: if false;
+
+      allow create: if isAdmin() &&
+        isValidId(adminUid) &&
+        isValidAdminUser(incoming()) &&
+        incoming().uid == adminUid &&
+        incoming().createdAt == request.time;
+
+      allow update: if false;
+
+      allow delete: if isAdmin() && isValidId(adminUid);
+    }
+  }
+}
