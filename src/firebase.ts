@@ -43,26 +43,10 @@ import {
   UserProfileRecord,
 } from './types';
 
-const env = import.meta.env as Record<string, string | undefined>;
+export const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
 
-const resolvedFirebaseConfig = {
-  ...firebaseConfig,
-  apiKey: env.VITE_FIREBASE_API_KEY?.trim() || firebaseConfig.apiKey,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN?.trim() || firebaseConfig.authDomain,
-  projectId: env.VITE_FIREBASE_PROJECT_ID?.trim() || firebaseConfig.projectId,
-  appId: env.VITE_FIREBASE_APP_ID?.trim() || firebaseConfig.appId,
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET?.trim() || firebaseConfig.storageBucket,
-  messagingSenderId:
-    env.VITE_FIREBASE_MESSAGING_SENDER_ID?.trim() || firebaseConfig.messagingSenderId,
-};
-
-const resolvedFirestoreDbId =
-  env.VITE_FIREBASE_FIRESTORE_DATABASE_ID?.trim() || firebaseConfig.firestoreDatabaseId;
-
-export const FIREBASE_PROJECT_ID = resolvedFirebaseConfig.projectId;
-
-const app = initializeApp(resolvedFirebaseConfig);
-export const db = getFirestore(app, resolvedFirestoreDbId);
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
