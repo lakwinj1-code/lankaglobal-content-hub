@@ -3,7 +3,9 @@ import {
   GoogleAuthProvider,
   User,
   getAuth,
+  getRedirectResult,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
 } from 'firebase/auth';
 import {
@@ -32,6 +34,7 @@ import {
   CreatorProfileRecord,
   CreatorType,
   KeyArtVariant,
+  Language,
   PipelineProject,
   PostCommentRecord,
   PrivateSubmissionRecord,
@@ -40,8 +43,26 @@ import {
   UserProfileRecord,
 } from './types';
 
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const env = import.meta.env as Record<string, string | undefined>;
+
+const resolvedFirebaseConfig = {
+  ...firebaseConfig,
+  apiKey: env.VITE_FIREBASE_API_KEY?.trim() || firebaseConfig.apiKey,
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN?.trim() || firebaseConfig.authDomain,
+  projectId: env.VITE_FIREBASE_PROJECT_ID?.trim() || firebaseConfig.projectId,
+  appId: env.VITE_FIREBASE_APP_ID?.trim() || firebaseConfig.appId,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET?.trim() || firebaseConfig.storageBucket,
+  messagingSenderId:
+    env.VITE_FIREBASE_MESSAGING_SENDER_ID?.trim() || firebaseConfig.messagingSenderId,
+};
+
+const resolvedFirestoreDbId =
+  env.VITE_FIREBASE_FIRESTORE_DATABASE_ID?.trim() || firebaseConfig.firestoreDatabaseId;
+
+export const FIREBASE_PROJECT_ID = resolvedFirebaseConfig.projectId;
+
+const app = initializeApp(resolvedFirebaseConfig);
+export const db = getFirestore(app, resolvedFirestoreDbId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
@@ -50,6 +71,137 @@ export const ADMIN_EMAIL = 'lakwinj1@gmail.com';
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB max screenplay file
 const MAX_BASE64_CHUNK_CHARS = 600000; // <= 650,000 rule limit (~450 KB binary per doc)
 const MAX_CHUNKS = 25;
+const PENDING_AUTH_REG_STORAGE_KEY = 'lg_pending_google_reg';
+
+export interface PendingGoogleRegistration {
+  displayName?: string;
+  creativeRole?: CreativeRole;
+}
+
+export type AuthErrorKind =
+  | 'unauthorized-domain'
+  | 'api-key-referrer'
+  | 'popup-blocked'
+  | 'cancelled'
+  | 'network'
+  | 'other';
+
+export interface ParsedAuthError {
+  kind: AuthErrorKind;
+  code: string;
+  message: string;
+  hostname: string;
+  projectId: string;
+}
+
+export function canUseRedirectFallback(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.self === window.top;
+  } catch {
+    return false;
+  }
+}
+
+export function parseFirebaseAuthError(error: unknown, lang: Language): ParsedAuthError {
+  const errObj = error as { code?: unknown; message?: unknown } | null;
+  const rawCode = typeof errObj?.code === 'string' ? errObj.code : '';
+  const rawMessage =
+    typeof errObj?.message === 'string'
+      ? errObj.message
+      : error instanceof Error
+        ? error.message
+        : String(error || '');
+  const hostname =
+    typeof window !== 'undefined' && window.location.hostname
+      ? window.location.hostname
+      : 'your-domain';
+
+  if (
+    rawCode === 'auth/unauthorized-domain' ||
+    rawMessage.toLowerCase().includes('unauthorized-domain')
+  ) {
+    return {
+      kind: 'unauthorized-domain',
+      code: rawCode || 'auth/unauthorized-domain',
+      hostname,
+      projectId: FIREBASE_PROJECT_ID,
+      message:
+        lang === Language.SI
+          ? `මෙම වෙබ් ඩොමේනය (${hostname}) තවම Firebase Authorized Domains ලැයිස්තුවට එක් කර නොමැත.`
+          : `This domain (${hostname}) is not yet added to Firebase Authorized Domains.`,
+    };
+  }
+
+  if (
+    rawMessage.includes('API_KEY_HTTP_REFERRER_BLOCKED') ||
+    rawMessage.toLowerCase().includes('requests-from-referer')
+  ) {
+    return {
+      kind: 'api-key-referrer',
+      code: rawCode || 'auth/api-key-referrer-blocked',
+      hostname,
+      projectId: FIREBASE_PROJECT_ID,
+      message:
+        lang === Language.SI
+          ? `Google Cloud API Key එකෙහි Website Restrictions සඳහා https://${hostname}/* ඇතුළත් කළ යුතුය.`
+          : `Add https://${hostname}/* to your API Key Website Restrictions in Google Cloud Console.`,
+    };
+  }
+
+  if (rawCode === 'auth/popup-blocked' || rawMessage.toLowerCase().includes('popup-blocked')) {
+    return {
+      kind: 'popup-blocked',
+      code: 'auth/popup-blocked',
+      hostname,
+      projectId: FIREBASE_PROJECT_ID,
+      message:
+        lang === Language.SI
+          ? 'ඔබේ බ්‍රවුසරයෙන් Google Sign-In Popup කවුළුව අවහිර කර ඇත. කරුණාකර Popups සඳහා අවසර දෙන්න හෝ පහත Redirect ක්‍රමය භාවිත කරන්න.'
+          : 'Your browser blocked the Google sign-in popup. Please allow popups for this site or use full-page redirect below.',
+    };
+  }
+
+  if (
+    rawCode === 'auth/popup-closed-by-user' ||
+    rawCode === 'auth/cancelled-popup-request'
+  ) {
+    return {
+      kind: 'cancelled',
+      code: rawCode,
+      hostname,
+      projectId: FIREBASE_PROJECT_ID,
+      message:
+        lang === Language.SI
+          ? 'Google පිවිසුම් කවුළුව සම්පූර්ණ වීමට පෙර වැසී ගියේය. කරුණාකර නැවත උත්සාහ කරන්න.'
+          : 'The Google sign-in window was closed before completing. Please try again.',
+    };
+  }
+
+  if (rawCode === 'auth/network-request-failed') {
+    return {
+      kind: 'network',
+      code: rawCode,
+      hostname,
+      projectId: FIREBASE_PROJECT_ID,
+      message:
+        lang === Language.SI
+          ? 'ජාල සම්බන්ධතා දෝෂයක් හෝ බ්‍රවුසර් Ad-blocker / Cookie අවහිරතාවක් නිසා පිවිසීමට නොහැකි විය.'
+          : 'Network error or browser cookie/ad-blocker restriction prevented Google sign-in.',
+    };
+  }
+
+  return {
+    kind: 'other',
+    code: rawCode || 'auth/error',
+    hostname,
+    projectId: FIREBASE_PROJECT_ID,
+    message:
+      lang === Language.SI
+        ? `පිවිසීම අසාර්ථක විය${rawCode ? ` (${rawCode})` : ''}. කරුණාකර නැවත උත්සාහ කරන්න.`
+        : `Sign-in could not be completed${rawCode ? ` (${rawCode})` : ''}. Please try again.`,
+  };
+}
 
 export function isAdminUser(user: User | null | undefined): boolean {
   if (!user || !user.emailVerified || !user.email) return false;
@@ -119,9 +271,59 @@ async function testConnection(): Promise<void> {
 }
 void testConnection();
 
-export async function signInWithGooglePopup(): Promise<User> {
-  const credential = await signInWithPopup(auth, googleProvider);
-  return credential.user;
+export async function signInWithGoogleRedirect(
+  pendingReg?: PendingGoogleRegistration
+): Promise<void> {
+  try {
+    if (pendingReg && typeof window !== 'undefined') {
+      window.sessionStorage.setItem(
+        PENDING_AUTH_REG_STORAGE_KEY,
+        JSON.stringify(pendingReg)
+      );
+    }
+  } catch {
+    // Ignore storage errors in private browsing modes
+  }
+  await signInWithRedirect(auth, googleProvider);
+}
+
+export async function consumeGoogleRedirectResult(): Promise<{
+  user: User;
+  pendingReg?: PendingGoogleRegistration;
+} | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (!result?.user) return null;
+    let pendingReg: PendingGoogleRegistration | undefined;
+    try {
+      const raw = window.sessionStorage.getItem(PENDING_AUTH_REG_STORAGE_KEY);
+      if (raw) {
+        window.sessionStorage.removeItem(PENDING_AUTH_REG_STORAGE_KEY);
+        pendingReg = JSON.parse(raw) as PendingGoogleRegistration;
+      }
+    } catch {
+      pendingReg = undefined;
+    }
+    return { user: result.user, pendingReg };
+  } catch (err) {
+    console.warn('Redirect sign-in check failed:', err);
+    return null;
+  }
+}
+
+export async function signInWithGooglePopup(
+  pendingReg?: PendingGoogleRegistration
+): Promise<User> {
+  try {
+    const credential = await signInWithPopup(auth, googleProvider);
+    return credential.user;
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code;
+    if (code === 'auth/popup-blocked' && canUseRedirectFallback()) {
+      await signInWithGoogleRedirect(pendingReg);
+    }
+    throw error;
+  }
 }
 
 export async function signOutCurrentUser(): Promise<void> {

@@ -11,6 +11,10 @@ const PORT = Number(process.env.PORT) || 3000;
 async function startServer() {
   const app = express();
   app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    next();
+  });
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/api/health', (_req, res) => {

@@ -48,6 +48,8 @@ import { DEFAULT_PITCH_DRAFT, UI_COPY } from './data/content';
 import {
   OperationType,
   auth,
+  consumeGoogleRedirectResult,
+  creativeRoleToAccountType,
   db,
   ensureOrRegisterUserProfile,
   handleFirestoreError,
@@ -173,6 +175,23 @@ export default function App() {
 
   // Track Firebase Authentication State & Load/Ensure Member Profile + Public Creator Profile
   useEffect(() => {
+    void consumeGoogleRedirectResult().then(async (redirectResult) => {
+      if (!redirectResult?.user?.emailVerified) return;
+      try {
+        const regRole = redirectResult.pendingReg?.creativeRole;
+        const regType = regRole ? creativeRoleToAccountType(regRole) : undefined;
+        const profile = await ensureOrRegisterUserProfile(
+          redirectResult.user,
+          redirectResult.pendingReg?.displayName,
+          regType,
+          regRole
+        );
+        setUserProfile(profile);
+      } catch {
+        // Profile listener / fallback will continue normally
+      }
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       setAuthReady(true);

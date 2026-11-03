@@ -1,12 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import { Check, LogIn, LogOut, ShieldCheck, UserPlus, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  LogIn,
+  LogOut,
+  ShieldCheck,
+  UserPlus,
+  X,
+} from 'lucide-react';
 import { CREATIVE_ROLES, CREATIVE_ROLE_LABELS } from '../data/content';
 import {
+  ParsedAuthError,
+  canUseRedirectFallback,
   creativeRoleToAccountType,
   ensureOrRegisterUserProfile,
   isAdminUser,
+  parseFirebaseAuthError,
   signInWithGooglePopup,
+  signInWithGoogleRedirect,
   signOutCurrentUser,
   updateUserProfileDetails,
 } from '../firebase';
@@ -20,6 +33,26 @@ interface AccountModalProps {
   onProfileUpdated: (profile: UserProfileRecord) => void;
   onOpenAdminPanel: () => void;
   onClose: () => void;
+}
+
+function buildFallbackProfile(
+  user: User,
+  preferredName?: string,
+  preferredType?: CreatorType
+): UserProfileRecord {
+  const nowIso = new Date().toISOString();
+  return {
+    uid: user.uid,
+    displayName:
+      preferredName?.trim() ||
+      user.displayName ||
+      user.email?.split('@')[0] ||
+      'Creator',
+    email: user.email || '',
+    creatorType: preferredType || 'Screenwriter',
+    createdAtIso: nowIso,
+    updatedAtIso: nowIso,
+  };
 }
 
 export const AccountModal: React.FC<AccountModalProps> = ({
@@ -39,13 +72,18 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const [busy, setBusy] = useState<boolean>(false);
   const [savedNotice, setSavedNotice] = useState<boolean>(false);
   const [errorText, setErrorText] = useState<string>('');
+  const [authDiag, setAuthDiag] = useState<ParsedAuthError | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState<boolean>(false);
 
   const userIsAdmin = isAdminUser(currentUser);
+  const redirectSupported = canUseRedirectFallback();
 
   useEffect(() => {
     if (!open) return;
     setErrorText('');
+    setAuthDiag(null);
     setSavedNotice(false);
+    setCopiedDomain(false);
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
@@ -66,21 +104,59 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
   if (!open) return null;
 
+  const handleCopyHostname = async (hostname: string) => {
+    try {
+      await navigator.clipboard.writeText(hostname);
+      setCopiedDomain(true);
+      window.setTimeout(() => setCopiedDomain(false), 2200);
+    } catch {
+      // Ignore clipboard failures
+    }
+  };
+
   const handleLoginSubmit = async () => {
     setBusy(true);
     setErrorText('');
+    setAuthDiag(null);
+    let signedInUser: User;
     try {
-      const user = await signInWithGooglePopup();
-      const profile = await ensureOrRegisterUserProfile(user);
+      signedInUser = await signInWithGooglePopup();
+    } catch (err) {
+      const parsed = parseFirebaseAuthError(err, lang);
+      setAuthDiag(parsed);
+      setErrorText(parsed.message);
+      setBusy(false);
+      return;
+    }
+
+    try {
+      const profile = await ensureOrRegisterUserProfile(signedInUser);
       onProfileUpdated(profile);
-      onClose();
     } catch {
-      setErrorText(
-        lang === Language.SI
-          ? 'පිවිසීම අවලංගු විය හෝ අසාර්ථක විය. නැවත උත්සාහ කරන්න.'
-          : 'Sign-in was cancelled or failed. Please try again.'
-      );
+      onProfileUpdated(buildFallbackProfile(signedInUser));
     } finally {
+      setBusy(false);
+    }
+    onClose();
+  };
+
+  const handleRedirectSignIn = async () => {
+    setBusy(true);
+    setErrorText('');
+    setAuthDiag(null);
+    try {
+      await signInWithGoogleRedirect(
+        authTab === 'register'
+          ? {
+              displayName: regName.trim() || undefined,
+              creativeRole: regCreativeRole,
+            }
+          : undefined
+      );
+    } catch (err) {
+      const parsed = parseFirebaseAuthError(err, lang);
+      setAuthDiag(parsed);
+      setErrorText(parsed.message);
       setBusy(false);
     }
   };
@@ -98,26 +174,43 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
     setBusy(true);
     setErrorText('');
+    setAuthDiag(null);
+
+    let signedInUser: User;
     try {
-      const user = await signInWithGooglePopup();
-      const mappedAccountType = creativeRoleToAccountType(regCreativeRole);
+      signedInUser = await signInWithGooglePopup({
+        displayName: regName.trim() || undefined,
+        creativeRole: regCreativeRole,
+      });
+    } catch (err) {
+      const parsed = parseFirebaseAuthError(err, lang);
+      setAuthDiag(parsed);
+      setErrorText(parsed.message);
+      setBusy(false);
+      return;
+    }
+
+    const mappedAccountType = creativeRoleToAccountType(regCreativeRole);
+    try {
       const profile = await ensureOrRegisterUserProfile(
-        user,
+        signedInUser,
         regName.trim() || undefined,
         mappedAccountType,
         regCreativeRole
       );
       onProfileUpdated(profile);
-      onClose();
     } catch {
-      setErrorText(
-        lang === Language.SI
-          ? 'ලියාපදිංචි වීම අවලංගු විය හෝ අසාර්ථක විය. නැවත උත්සාහ කරන්න.'
-          : 'Account registration was cancelled or failed. Please try again.'
+      onProfileUpdated(
+        buildFallbackProfile(
+          signedInUser,
+          regName.trim() || undefined,
+          mappedAccountType
+        )
       );
     } finally {
       setBusy(false);
     }
+    onClose();
   };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -153,6 +246,68 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const handleSignOut = async () => {
     onClose();
     await signOutCurrentUser();
+  };
+
+  const renderAuthErrorFeedback = () => {
+    if (!errorText) return null;
+
+    if (authDiag?.kind === 'unauthorized-domain') {
+      return (
+        <div className="rounded-xl bg-amber-500/10 border border-amber-400/35 p-3.5 space-y-2.5 text-left">
+          <div className="flex items-start gap-2 text-amber-300 text-xs font-semibold">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{errorText}</span>
+          </div>
+
+          <p className="text-[11px] text-slate-300 leading-relaxed">
+            {lang === Language.SI
+              ? `Firebase Console (${authDiag.projectId}) වෙත පිවිස Authentication → Settings → Authorized domains වෙත ගොස් පහත Domain නාමය එක් කරන්න:`
+              : `Open Firebase Console (${authDiag.projectId}) → Authentication → Settings → Authorized domains → Add domain:`}
+          </p>
+
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#070A12] border border-white/10">
+            <code className="text-xs font-mono text-sky-300 truncate">
+              {authDiag.hostname}
+            </code>
+            <button
+              type="button"
+              onClick={() => handleCopyHostname(authDiag.hostname)}
+              className="px-2.5 py-1 rounded-md bg-white/[0.08] hover:bg-white/[0.15] text-[11px] font-semibold text-white inline-flex items-center gap-1 shrink-0 cursor-pointer"
+            >
+              {copiedDomain ? (
+                <>
+                  <Check className="w-3 h-3 text-emerald-400" />
+                  <span>{lang === Language.SI ? 'Copy විය' : 'Copied'}</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-rose-400 leading-relaxed">{errorText}</p>
+        {redirectSupported && authDiag?.kind !== 'cancelled' && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={handleRedirectSignIn}
+            className="w-full py-2.5 px-4 rounded-xl border border-sky-400/40 bg-sky-400/10 hover:bg-sky-400/20 text-sky-300 text-xs font-semibold transition-colors cursor-pointer"
+          >
+            {lang === Language.SI
+              ? 'විකල්ප ක්‍රමය: Full-Page Redirect හරහා Google ගිණුමෙන් පිවිසෙන්න'
+              : 'Alternative: Continue with Google (Full-Page Redirect)'}
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -204,6 +359,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   onClick={() => {
                     setAuthTab('login');
                     setErrorText('');
+                    setAuthDiag(null);
                   }}
                   className={`py-2 px-3 rounded-lg text-xs font-semibold transition-colors min-h-[38px] inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
                     authTab === 'login'
@@ -221,6 +377,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   onClick={() => {
                     setAuthTab('register');
                     setErrorText('');
+                    setAuthDiag(null);
                   }}
                   className={`py-2 px-3 rounded-lg text-xs font-semibold transition-colors min-h-[38px] inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
                     authTab === 'register'
@@ -241,7 +398,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                       : 'Sign in to access your filmmaker profile, track screenplay review status, and connect in the community.'}
                   </p>
 
-                  {errorText && <p className="text-xs text-rose-400">{errorText}</p>}
+                  {renderAuthErrorFeedback()}
 
                   <button
                     type="button"
@@ -308,7 +465,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                     </select>
                   </div>
 
-                  {errorText && <p className="text-xs text-rose-400">{errorText}</p>}
+                  {renderAuthErrorFeedback()}
 
                   <button
                     type="submit"

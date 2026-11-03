@@ -13,6 +13,7 @@ import { UI_COPY } from '../data/content';
 import {
   MAX_UPLOAD_BYTES,
   ensureOrRegisterUserProfile,
+  parseFirebaseAuthError,
   signInWithGooglePopup,
   submitScreenplayToCloud,
 } from '../firebase';
@@ -235,16 +236,20 @@ export const SubmissionSection: React.FC<SubmissionSectionProps> = ({
     let activeUser = currentUser;
     if (!activeUser) {
       try {
-        activeUser = await signInWithGooglePopup();
+        activeUser = await signInWithGooglePopup({
+          displayName: form.writerName.trim() || undefined,
+        });
+      } catch (authErr) {
+        const parsed = parseFirebaseAuthError(authErr, lang);
+        setSubmitting(false);
+        setSubmitError(parsed.message);
+        return;
+      }
+
+      try {
         await ensureOrRegisterUserProfile(activeUser, form.writerName);
       } catch {
-        setSubmitting(false);
-        setSubmitError(
-          lang === Language.SI
-            ? 'NDA ආරක්ෂාව යටතේ තිරපිටපත යොමු කිරීමට කරුණාකර ඔබගේ ගිණුමට පිවිසෙන්න.'
-            : 'Please sign in to your creator account to submit your screenplay under NDA.'
-        );
-        return;
+        // Proceed with screenplay submission using authenticated user
       }
     }
 
